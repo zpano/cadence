@@ -1,0 +1,46 @@
+name: Build offline Go 1.25 audit cache
+
+on:
+  push:
+    branches:
+      - audit/go125-offline-cache-20260810
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.0'
+          cache: false
+      - name: Download module graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          go version
+          go mod download
+      - name: Package toolchain and module cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/audit-cache
+          goroot="$(go env GOROOT)"
+          gomodcache="$(go env GOMODCACHE)"
+          printf '%s\n' "$goroot" > /tmp/audit-cache/goroot-path.txt
+          printf '%s\n' "$gomodcache" > /tmp/audit-cache/gomodcache-path.txt
+          tar -C "$(dirname "$goroot")" -czf /tmp/audit-cache/go1.25.0-linux-amd64.tar.gz "$(basename "$goroot")"
+          tar -C "$(dirname "$gomodcache")" -czf /tmp/audit-cache/gomodcache.tar.gz "$(basename "$gomodcache")"
+          sha256sum /tmp/audit-cache/*.tar.gz > /tmp/audit-cache/SHA256SUMS
+          du -h /tmp/audit-cache/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cadence-offline-go125-cache
+          path: /tmp/audit-cache
+          if-no-files-found: error
+          retention-days: 1
